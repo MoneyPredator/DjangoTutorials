@@ -1,11 +1,13 @@
  
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect
-from django.views.generic import TemplateView 
+from django.views.generic import TemplateView, ListView
 from django.views import View
 from django.urls import reverse
 from django.core.exceptions import ValidationError 
 from django import forms
+from .models import Product 
+
 # Create your views here. 
 class HomePageView(TemplateView): 
     template_name = 'pages/home.html' 
@@ -26,15 +28,6 @@ class AboutPageView(TemplateView):
  
         return context 
     
- 
-class Product:
-    products = [
-        {"id": "1", "name": "TV", "description": "Best TV", "price": 500.00},
-        {"id": "2", "name": "iPhone", "description": "Best iPhone", "price": 999.99},
-        {"id": "3", "name": "Chromecast", "description": "Best Chromecast", "price": 35.50},
-        {"id": "4", "name": "Glasses", "description": "Best Glasses", "price": 80.75}
-    ]
- 
 class ProductIndexView(View): 
     template_name = 'products/index.html' 
  
@@ -42,7 +35,7 @@ class ProductIndexView(View):
         viewData = {} 
         viewData["title"] = "Products - Online Store" 
         viewData["subtitle"] =  "List of products" 
-        viewData["products"] = Product.products 
+        viewData["products"] = Product.objects.all()
  
         return render(request, self.template_name, viewData) 
  
@@ -50,36 +43,48 @@ class ProductShowView(View):
     template_name = 'products/show.html'
 
     def get(self, request, id):
+        #Revisar si es valido
         try:
             # Convertir el ID a entero
             product_id = int(id)
-
             # Verificar si el ID es válido
-            if product_id < 1 or product_id > len(Product.products):
-                return HttpResponseRedirect(reverse('home'))  # Redirige a la página de inicio
-
-            product = Product.products[product_id - 1]
-            viewData = {
-                "title": f"{product['name']} - Online Store",
-                "subtitle": f"{product['name']} - Product information",
-                "product": product,
-            }
-            return render(request, self.template_name, viewData)
-
+            if product_id < 1:
+                raise ValueError("El ID de producto debe ser 1 o mayor")
+            product = get_object_or_404(Product, pk=product_id)
+            #return HttpResponseRedirect(reverse('home'))  # Redirige a la página de inicio
         except (ValueError, IndexError):
             # Si el ID no es un número o está fuera de rango, redirigir al home
             return HttpResponseRedirect(reverse('home'))
+        viewData = {}
+        product = get_object_or_404(Product, pk=product_id)
+        viewData["title"] = product.name + " - Online Store"
+        viewData["subtitle"] = product.name + " - Product information"
+        viewData["product"] = product 
 
-    
-class ProductForm(forms.Form):
-    name = forms.CharField(required=True)
-    price = forms.FloatField(required=True)
+        return render(request, self.template_name, viewData)
+
+class ProductListView(ListView):
+    model = Product
+    template_name = 'product_list.html'
+    cotext_object_name = 'products' # This will allow you to loop through 'products' in your template
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Products - Online Store'
+        context['subtitle'] = 'List of products'
+        return context 
+
+
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ['name', 'price']
 
     # Validación personalizada para que el precio sea mayor a 0
     def clean_price(self):
         price = self.cleaned_data.get('price')
         if price <= 0:
-            raise ValidationError("The price must be greater than zero.")  # Mensaje de error
+            raise ValidationError("The price must be greater than zero.")  
         return price
  
  
@@ -96,6 +101,7 @@ class ProductCreateView(View):
     def post(self, request):
         form = ProductForm(request.POST)
         if form.is_valid():
+            form.save()
             return redirect('home')  # Redirigir a la página de inicio tras el envío
         else:
             viewData = {}
