@@ -8,6 +8,37 @@ from django.core.exceptions import ValidationError
 from django import forms
 from .models import Product 
 
+def ImageViewFactory(image_storage):
+    class ImageView(View):
+        template_name = 'images/index.html'
+
+        def get(self, request):
+            image_url = request.session.get('image_url', '')
+            return render(request, self.template_name, {'image_url': image_url})
+
+        def post(self, request):
+            image_url = image_storage.store(request)
+            if image_url:
+                request.session['image_url'] = image_url
+            return redirect('image_index')
+
+    return ImageView
+
+class ImageViewNoDI(View):
+    template_name = 'images/index.html'
+
+    def get(self, request):
+        image_url = request.session.get('image_url', '')
+        return render(request, self.template_name, {'image_url': image_url})
+
+    def post(self, request):
+        image_storage = ImageLocalStorage()
+        image_url = image_storage.store(request)
+        if image_url:
+            request.session['image_url'] = image_url
+        return redirect('image_index')
+
+
 # Create your views here. 
 class HomePageView(TemplateView): 
     template_name = 'pages/home.html' 
